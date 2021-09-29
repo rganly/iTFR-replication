@@ -1,0 +1,183 @@
+---
+title: "Rename"
+author: "Rachel Ganly"
+date: "1/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(haven) #read all dta files
+library(lubridate)
+library(demography) #Rob Hyndman's demography package
+
+
+b1<-read_dta("1995to1997.dta")
+b2<-read_dta("1998to2015Jan7.dta")
+View(b1)
+
+#quick fertility rate calcs
+
+#First, calc total age specific total births by year
+
+#reshape data
+b95to97<-b1%>%
+          rename(year=birth_year)%>%
+          mutate(ed_category=as.factor(mother_edu),
+                 agegroup=cut(mother_age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+          group_by(year,agegroup,ed_category)%>%
+          summarize(births=n())
+
+
+#reshape data                                                                  
+b98to15<-b2%>%     
+          rename(year=birth_year)%>%
+          mutate(ed_category=as.factor(mother_edu),
+                 agegroup=cut(mother_age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+          group_by(year,agegroup,ed_category)%>%
+          summarize(births=n())
+
+#create new df
+b95to15<-bind_rows(b95to97,b98to15)
+
+#change all missing values to NA
+b95to15<-na_if(b95to15,"X")
+b95to15<-na_if(b95to15,"")
+
+#Get annual total births to check against HK Stats data
+totalannualbirths<-b95to15%>%group_by(year)%>%summarize(births=sum(births))
+write.csv(totalannualbirths,"Total Annual Births.csv")
+
+#save down age group data as csv
+write.csv(b95to15,file="Hong Kong Births 1995 to 2015.csv")
+
+#Now estimate size of female pop for each education group, in each year using census and bicensus data
+c1<-read_sav("1996 HK census.sav")
+c2<-read_sav("2001 HK census.sav")
+c3<-read_sav("2006 HK census.sav")
+c4<-read_sav("2011 HK census.sav")
+c5<-read_sav("2016 HK census.sav")
+
+
+#Checks: get total population
+tp1<-c1%>%
+  filter(sex==1|sex==2)%>%
+  filter(!is.na(sex))%>%
+  mutate(year=1996,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,55,Inf),
+                            right=FALSE,  labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50-54","55+")))%>%
+  group_by(year,sex,agegroup)%>%summarise(n=n())
+
+tp2<-c2%>%
+  filter(sex==1|sex==2)%>%
+  mutate(year=2001,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,55,Inf),
+                            right=FALSE,  labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50-54","55+")))%>%
+  group_by(year,sex,agegroup)%>%summarise(n=n())
+
+tp3<-c3%>%
+  filter(sex==1|sex==2)%>%
+  mutate(year=2006,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,55,Inf),
+                            right=FALSE,  labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50-54","55+")))%>%
+  group_by(year,sex,agegroup)%>%summarise(n=n())
+
+tp4<-c4%>%
+  filter(sex==1|sex==2)%>%
+  mutate(year=2011,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,55,Inf),
+                            right=FALSE,  labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50-54","55+")))%>%
+  group_by(year,sex,agegroup)%>%summarise(n=n())
+
+tp5<-c5%>%
+  filter(sex==1|sex==2)%>%
+  mutate(year=2016,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,55,Inf),
+                            right=FALSE,  labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50-54","55+")))%>%
+  group_by(year,sex,agegroup)%>%summarise(n=n())
+  
+totalpop<-bind_rows(tp1,tp2,tp3,tp4,tp5)
+write.csv(totalpop,file="Total Pop by Age Group & Sex 1996 to 2016.csv")  
+  
+  
+
+#reshape female population data
+p1<-c1%>%
+      filter(sex==2)%>%
+      filter(relat!=14)%>%
+      mutate(year=1996,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+      rename(educn=level)%>%
+      mutate(ed_category=cut(educn,breaks=c(0,9,19,49,59,Inf),
+                             labels=c("1","2","3","4","5")))%>%
+      group_by(year,agegroup,ed_category)%>%summarize(pop=n())
+
+p2<-c2%>% filter(sex==2)%>%
+    filter(relat!=14)%>%
+      mutate(year=2001,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+      mutate(ed_category=cut(educn,breaks=c(0,9,19,49,59,Inf),
+                             labels=c("1","2","3","4","5")))%>%
+      group_by(year,agegroup,ed_category)%>%summarize(pop=n())
+
+p3<-c3%>% filter(sex==2)%>%
+  filter(relat!=14)%>%
+      mutate(year=2006,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+      mutate(ed_category=cut(educn,breaks=c(0,9,19,49,59,Inf),
+                             labels=c("1","2","3","4","5")))%>%
+      group_by(year,agegroup,ed_category)%>%summarize(pop=n())
+
+p4<-c4%>% filter(sex==2)%>%
+  filter(relat!=14)%>%
+      mutate(year=2011,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+            mutate(ed_category=cut(educn,breaks=c(0,9,19,49,59,Inf),
+                             labels=c("1","2","3","4","5")))%>%
+      group_by(year,agegroup,ed_category)%>%summarize(pop=n())
+
+p5<-c5%>% filter(sex==2)%>%
+  filter(relat!=14)%>%
+      mutate(year=2016,agegroup=cut(age,breaks=c(0,15,20,25,30,35,40,45,50,Inf),right=FALSE,
+          labels=c("<15","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50+")))%>%
+      mutate(ed_category=cut(educn,breaks=c(0,9,19,49,59,Inf),
+                             labels=c("1","2","3","4","5")))%>%
+      group_by(year,agegroup,ed_category)%>%summarize(pop=n())
+
+#create new df with pop from 1996 to 2016
+#female pop  by age and educational attainment
+femalepop_by_age_ed<-bind_rows(p1,p2,p3,p4,p5)
+femalepop_by_age_ed<-femalepop_by_age_ed%>%mutate(totalpop=pop*20)
+
+#female pop by age only
+femalepop_by_age<-femalepop_by_age_ed%>%group_by(year,agegroup)%>%summarize(totalpop=sum(totalpop))
+  
+
+#Calculate ASFR for 96,01,06,11
+births_by_age<-b95to15%>%group_by(year,agegroup)%>%summarize(births=sum(births))
+asfr<-left_join(femalepop_by_age,births_by_age,by=c("year","agegroup"))%>%mutate(asfr=births/totalpop)
+tfr<-asfr%>%group_by(year)%>%mutate(tfr=sum(asfr*5))
+tfr<-tfr%>%mutate(Birthsper1000women=asfr*1000)
+
+write.csv(tfr,"TFR 1996-2011.csv")
+
+#Check total number of women is correct
+w1<-c1%>%filter(ppn!=00,sex==2)%>%nrow()
+w2<-c2%>%filter(ppn!=00,sex==2)%>%nrow()
+w3<-c3%>%filter(ppn!=00,sex==2)%>%nrow()
+w4<-c4%>%filter(ppn!=00,sex==2)%>%nrow()
+w5<-c5%>%filter(ppn!=00,sex==2)%>%nrow()
+
+#This should == 0
+c(w1-sum(p1$n),w2-sum(p2$n), w3-sum(p3$n), w4-sum(p4$n), w5-sum(p5$n))  
+
+write.csv(p1,file="Hong Kong Population 1996.csv")
+write.csv(p2,file="Hong Kong Population 2001.csv")
+write.csv(p3,file="Hong Kong Population 2006.csv")
+write.csv(p4,file="Hong Kong Population 2011.csv")
+write.csv(p5,file="Hong Kong Population 2016.csv")
+write.csv(femalepop, file="Hong Kong Female Pop 1996-2016.csv")
+
+```
+
